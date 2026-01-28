@@ -32,7 +32,7 @@ Parametry:
 - `--limit` – limit liczby przedmiotów do pobrania (przydatne w testach).
 - `--pause` – przerwa między zapytaniami do API w sekundach (domyślnie `0.2`).
 - `--api-base` – bazowy adres API (domyślnie `https://api.warframe.market/v1`).
-  Narzędzie automatycznie spróbuje też wariantu bez `/v1` lub z `/v1`, jeśli jest to konieczne.
+  Narzędzie automatycznie spróbuje też wariantu bez `/v1` lub z `/v1`/`/v2`, jeśli jest to konieczne.
 
 Przykład (pobierz tylko 20 pierwszych przedmiotów i zapisuj do osobnej bazy):
 
@@ -81,6 +81,7 @@ Narzędzie tworzy dwie tabele:
 - `orders` – aukcje przypisane do przedmiotów (połączone przez `item_id`).
 
 Tabele są uzupełniane mechanizmem upsert, więc kolejne uruchomienia aktualizują istniejące wpisy.
+Plik bazy `.sqlite3` jest tworzony automatycznie przy uruchomieniu (nie musisz go tworzyć ręcznie).
 
 ## Instrukcja od A do Z (komputer nieprzygotowany)
 
@@ -156,6 +157,10 @@ Poniżej kompletna instrukcja dla systemu Windows, jeśli komputer nie jest w og
   - Jeśli wciąż występuje błąd, spróbuj bezpośrednio:
     ```bash
     python warframe_market_fetcher.py --api-base https://api.warframe.market
+    ```
+  - Lub wymuś wersję v2:
+    ```bash
+    python warframe_market_fetcher.py --api-base https://api.warframe.market/v2
     ```
   - Sprawdź, czy URL działa w przeglądarce:
     - https://api.warframe.market/v1/items

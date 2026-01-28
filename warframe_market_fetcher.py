@@ -64,16 +64,23 @@ def request_json(session: requests.Session, url: str) -> tuple[int, dict | None,
     text_preview = response.text[:200]
     if status_code >= 400:
         return status_code, None, text_preview
-    return status_code, response.json(), text_preview
+    try:
+        return status_code, response.json(), text_preview
+    except ValueError:
+        return status_code, None, text_preview
 
 
 def build_base_candidates(api_base_url: str) -> list[str]:
     normalized = api_base_url.rstrip("/")
     candidates = [normalized]
     if normalized.endswith("/v1"):
-        candidates.append(normalized[:-3])
+        root = normalized[:-3]
+        candidates.extend([root, f"{root}/v2"])
+    elif normalized.endswith("/v2"):
+        root = normalized[:-3]
+        candidates.extend([root, f"{root}/v1"])
     else:
-        candidates.append(f"{normalized}/v1")
+        candidates.extend([f"{normalized}/v1", f"{normalized}/v2"])
     unique_candidates: list[str] = []
     for candidate in candidates:
         if candidate not in unique_candidates:
@@ -221,15 +228,18 @@ def run_fetcher(
     api_base_url: str,
 ) -> None:
     session = build_session()
-    resolved_base, items = fetch_items(session, api_base_url)
-    if resolved_base != api_base_url.rstrip("/"):
-        print(f"Używam API: {resolved_base}")
     connection = sqlite3.connect(database_path)
     try:
         ensure_schema(connection)
+        connection.commit()
+        resolved_base, items = fetch_items(session, api_base_url)
+        if resolved_base != api_base_url.rstrip("/"):
+            print(f"Używam API: {resolved_base}")
+        if not items:
+            raise RuntimeError("API nie zwróciło żadnych przedmiotów.")
         save_items(connection, items)
         for item in iter_items(items, limit):
-            orders = fetch_orders(session, api_base_url, item["url_name"])
+            orders = fetch_orders(session, resolved_base, item["url_name"])
             save_orders(connection, item["id"], orders)
             if pause_seconds:
                 time.sleep(pause_seconds)
