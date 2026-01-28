@@ -32,6 +32,7 @@ Parametry:
 - `--limit` – limit liczby przedmiotów do pobrania (przydatne w testach).
 - `--pause` – przerwa między zapytaniami do API w sekundach (domyślnie `0.2`).
 - `--api-base` – bazowy adres API (domyślnie `https://api.warframe.market/v1`).
+  Narzędzie automatycznie spróbuje też wariantu bez `/v1` lub z `/v1`, jeśli jest to konieczne.
 
 Przykład (pobierz tylko 20 pierwszych przedmiotów i zapisuj do osobnej bazy):
 
@@ -156,6 +157,9 @@ Poniżej kompletna instrukcja dla systemu Windows, jeśli komputer nie jest w og
     ```bash
     python warframe_market_fetcher.py --api-base https://api.warframe.market
     ```
+  - Sprawdź, czy URL działa w przeglądarce:
+    - https://api.warframe.market/v1/items
+  - Jeśli w przeglądarce również widzisz błąd, to znaczy, że sieć/proxy blokuje dostęp.
   - W sieciach firmowych lub szkolnych API może być blokowane przez proxy lub firewall.
 
 - **Brak komendy `python` w systemie**

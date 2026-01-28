@@ -58,26 +58,65 @@ def ensure_schema(connection: sqlite3.Connection) -> None:
     connection.commit()
 
 
-def request_json(session: requests.Session, url: str) -> dict:
+def request_json(session: requests.Session, url: str) -> tuple[int, dict | None, str]:
     response = session.get(url, timeout=30)
-    if response.status_code == 404:
+    status_code = response.status_code
+    text_preview = response.text[:200]
+    if status_code >= 400:
+        return status_code, None, text_preview
+    return status_code, response.json(), text_preview
+
+
+def build_base_candidates(api_base_url: str) -> list[str]:
+    normalized = api_base_url.rstrip("/")
+    candidates = [normalized]
+    if normalized.endswith("/v1"):
+        candidates.append(normalized[:-3])
+    else:
+        candidates.append(f"{normalized}/v1")
+    unique_candidates: list[str] = []
+    for candidate in candidates:
+        if candidate not in unique_candidates:
+            unique_candidates.append(candidate)
+    return unique_candidates
+
+
+def resolve_api_base(session: requests.Session, api_base_url: str) -> str:
+    candidates = build_base_candidates(api_base_url)
+    errors: list[str] = []
+    for candidate in candidates:
+        status_code, payload, preview = request_json(session, f"{candidate}/items")
+        if status_code < 400 and payload is not None:
+            return candidate
+        errors.append(f"{candidate}/items -> {status_code} ({preview})")
+    raise RuntimeError(
+        "Nie udało się pobrać listy przedmiotów z API Warframe Market. "
+        "Sprawdź połączenie sieciowe, proxy/firewall albo podaj poprawny "
+        "adres w --api-base. Próbowane URL-e:\n- "
+        + "\n- ".join(errors)
+    )
+
+
+def fetch_items(session: requests.Session, api_base_url: str) -> tuple[str, list[dict]]:
+    resolved_base = resolve_api_base(session, api_base_url)
+    _, payload, _ = request_json(session, f"{resolved_base}/items")
+    if payload is None:
         raise RuntimeError(
-            "Otrzymano HTTP 404 z API Warframe Market. "
-            "Sprawdź bazowy URL API i połączenie sieciowe."
+            "Nie udało się pobrać listy przedmiotów mimo poprawnego API."
         )
-    response.raise_for_status()
-    return response.json()
-
-
-def fetch_items(session: requests.Session, api_base_url: str) -> list[dict]:
-    payload = request_json(session, f"{api_base_url}/items")
-    return payload["payload"]["items"]
+    return resolved_base, payload["payload"]["items"]
 
 
 def fetch_orders(
     session: requests.Session, api_base_url: str, item_url_name: str
 ) -> list[dict]:
-    payload = request_json(session, f"{api_base_url}/items/{item_url_name}/orders")
+    _, payload, _ = request_json(
+        session, f"{api_base_url}/items/{item_url_name}/orders"
+    )
+    if payload is None:
+        raise RuntimeError(
+            f"Nie udało się pobrać aukcji dla {item_url_name}."
+        )
     return payload["payload"]["orders"]
 
 
@@ -182,7 +221,9 @@ def run_fetcher(
     api_base_url: str,
 ) -> None:
     session = build_session()
-    items = fetch_items(session, api_base_url)
+    resolved_base, items = fetch_items(session, api_base_url)
+    if resolved_base != api_base_url.rstrip("/"):
+        print(f"Używam API: {resolved_base}")
     connection = sqlite3.connect(database_path)
     try:
         ensure_schema(connection)
