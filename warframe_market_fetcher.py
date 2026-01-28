@@ -6,7 +6,7 @@ from typing import Iterable
 
 import requests
 
-API_BASE_URL = "https://api.warframe.market/v1"
+DEFAULT_API_BASE_URL = "https://api.warframe.market/v1"
 DEFAULT_LANGUAGE = "en"
 
 
@@ -58,19 +58,26 @@ def ensure_schema(connection: sqlite3.Connection) -> None:
     connection.commit()
 
 
-def fetch_items(session: requests.Session) -> list[dict]:
-    response = session.get(f"{API_BASE_URL}/items", timeout=30)
+def request_json(session: requests.Session, url: str) -> dict:
+    response = session.get(url, timeout=30)
+    if response.status_code == 404:
+        raise RuntimeError(
+            "Otrzymano HTTP 404 z API Warframe Market. "
+            "Sprawdź bazowy URL API i połączenie sieciowe."
+        )
     response.raise_for_status()
-    payload = response.json()
+    return response.json()
+
+
+def fetch_items(session: requests.Session, api_base_url: str) -> list[dict]:
+    payload = request_json(session, f"{api_base_url}/items")
     return payload["payload"]["items"]
 
 
-def fetch_orders(session: requests.Session, item_url_name: str) -> list[dict]:
-    response = session.get(
-        f"{API_BASE_URL}/items/{item_url_name}/orders", timeout=30
-    )
-    response.raise_for_status()
-    payload = response.json()
+def fetch_orders(
+    session: requests.Session, api_base_url: str, item_url_name: str
+) -> list[dict]:
+    payload = request_json(session, f"{api_base_url}/items/{item_url_name}/orders")
     return payload["payload"]["orders"]
 
 
@@ -169,16 +176,19 @@ def iter_items(items: list[dict], limit: int | None) -> Iterable[dict]:
 
 
 def run_fetcher(
-    database_path: str, limit: int | None, pause_seconds: float
+    database_path: str,
+    limit: int | None,
+    pause_seconds: float,
+    api_base_url: str,
 ) -> None:
     session = build_session()
-    items = fetch_items(session)
+    items = fetch_items(session, api_base_url)
     connection = sqlite3.connect(database_path)
     try:
         ensure_schema(connection)
         save_items(connection, items)
         for item in iter_items(items, limit):
-            orders = fetch_orders(session, item["url_name"])
+            orders = fetch_orders(session, api_base_url, item["url_name"])
             save_orders(connection, item["id"], orders)
             if pause_seconds:
                 time.sleep(pause_seconds)
@@ -208,12 +218,20 @@ def parse_args() -> argparse.Namespace:
         default=0.2,
         help="Pauza między kolejnymi zapytaniami do API (sekundy).",
     )
+    parser.add_argument(
+        "--api-base",
+        default=DEFAULT_API_BASE_URL,
+        help=(
+            "Bazowy adres API (domyślnie https://api.warframe.market/v1). "
+            "Użyj, jeśli Twoje środowisko wymaga innej ścieżki."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    run_fetcher(args.database_path, args.limit, args.pause)
+    run_fetcher(args.database_path, args.limit, args.pause, args.api_base)
 
 
 if __name__ == "__main__":
